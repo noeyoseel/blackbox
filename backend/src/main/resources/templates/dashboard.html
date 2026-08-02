@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1>초개인화 서랍장</h1>
+    <div class="brand-tagline">조용하고, 정확하고, 시기별로 쌓여온 관심사를 있는 그대로 보여준다.</div>
+
+    <p class="stat-narrative">
+        지금까지 <em th:text="${stats.totalBookmarks}">0</em>개가 쌓였고,
+        그중 <em th:text="${stats.taggedBookmarks}">0</em>개엔 태그를 붙였어요.
+    </p>
+
+    <h2>
+        관심사 태그
+        <a href="/tags" style="float:right; font-size:12px; color:var(--muted); text-decoration:none;">태그별로 보기 →</a>
+    </h2>
+    <div th:if="${#lists.isEmpty(stats.topTagLabels)}" class="empty">아직 태깅된 북마크가 없습니다.</div>
+    <div class="chart-card" th:unless="${#lists.isEmpty(stats.topTagLabels)}">
+        <canvas id="tagChart" height="110"></canvas>
+    </div>
+
+    <h2>월별 북마크 추이</h2>
+    <div th:if="${#lists.isEmpty(stats.monthLabels)}" class="empty">아직 태깅된 북마크가 없습니다.</div>
+    <div class="chart-card" th:unless="${#lists.isEmpty(stats.monthLabels)}">
+        <canvas id="monthlyChart" height="80"></canvas>
+    </div>
+
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        const monthLabels = /*[[${stats.monthLabels}]]*/ [];
+        const monthCounts = /*[[${stats.monthlyCounts}]]*/ [];
+        const topTagLabels = /*[[${stats.topTagLabels}]]*/ [];
+        const topTagCounts = /*[[${stats.topTagCounts}]]*/ [];
+        /*]]>*/
+
+        const accent = "#C17F3E";
+        let monthlyChart = null;
+        let tagChart = null;
+
+        function cssVar(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        }
+
+        function renderCharts() {
+            const muted = cssVar("--muted");
+            const line = cssVar("--line");
+            const accentTint = cssVar("--accent-tint");
+
+            Chart.defaults.font.family = "'Pretendard', -apple-system, sans-serif";
+            Chart.defaults.color = muted;
+
+            if (monthlyChart) monthlyChart.destroy();
+            if (tagChart) tagChart.destroy();
+
+            const monthlyEl = document.getElementById("monthlyChart");
+            if (monthlyEl && monthLabels.length > 0) {
+                monthlyChart = new Chart(monthlyEl, {
+                    type: "line",
+                    data: {
+                        labels: monthLabels,
+                        datasets: [{
+                            label: "북마크 수",
+                            data: monthCounts,
+                            borderColor: accent,
+                            backgroundColor: accentTint,
+                            pointBackgroundColor: accent,
+                            pointRadius: 3,
+                            fill: true,
+                            tension: 0.25,
+                        }],
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { color: line }, ticks: { color: muted } },
+                            y: { grid: { color: line }, ticks: { color: muted }, beginAtZero: true },
+                        },
+                    },
+                });
+            }
+
+            const tagEl = document.getElementById("tagChart");
+            if (tagEl && topTagLabels.length > 0) {
+                tagChart = new Chart(tagEl, {
+                    type: "bar",
+                    data: {
+                        labels: topTagLabels,
+                        datasets: [{
+                            label: "태그 빈도",
+                            data: topTagCounts,
+                            backgroundColor: accent,
+                            borderRadius: 3,
+                        }],
+                    },
+                    options: {
+                        indexAxis: "y",
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { color: line }, ticks: { color: muted }, beginAtZero: true },
+                            y: { grid: { display: false }, ticks: { color: muted } },
+                        },
+                    },
+                });
+            }
+        }
+
+        // Pretendard 폰트가 로드되기 전에 Chart.js가 텍스트 너비를 측정하면
+        // 라벨이 글자 단위로 줄바꿈되는 등 레이아웃이 깨진다. 폰트 로딩을 기다린 뒤 렌더링한다.
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.load("500 12px Pretendard").then(() => document.fonts.ready).then(renderCharts);
+        } else {
+            renderCharts();
+        }
+    </script>
+</body>
+</html>

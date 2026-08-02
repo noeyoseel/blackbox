@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+    <div th:fragment="card(b)" class="bookmark-item" th:attr="data-bookmark-id=${b.tweetId}">
+        <a th:if="${b.authorName != null}" class="card-header" th:href="'https://x.com/' + ${b.authorHandle}" target="_blank" rel="noopener">
+            <img class="card-avatar" th:if="${b.authorAvatar != null}" th:src="${b.authorAvatar}" alt="" />
+            <div class="card-header-text">
+                <span class="card-name" th:text="${b.authorName}">이름</span>
+                <span class="card-handle" th:text="'@' + ${b.authorHandle}">@handle</span>
+            </div>
+        </a>
+        <div class="text" th:text="${b.text}">트윗 본문</div>
+        <div th:if="${not #lists.isEmpty(b.media)}" class="media-grid" th:classappend="'media-count-' + ${#lists.size(b.media)}">
+            <button th:each="m : ${b.media}" type="button" class="media-item"
+                    th:attr="data-media-url=${m.url} + '?format=jpg&name=large', data-tweet-url='https://x.com/i/status/' + ${b.tweetId}">
+                <img th:src="${m.url}" alt="" loading="lazy" />
+            </button>
+        </div>
+        <a th:if="${b.quotedText != null}" class="quote-card"
+           th:href="${b.quotedTweetId != null} ? ('https://x.com/i/status/' + ${b.quotedTweetId}) : '#'"
+           target="_blank" rel="noopener">
+            <div class="quote-card-header" th:if="${b.quotedAuthorName != null}">
+                <img class="quote-avatar" th:if="${b.quotedAuthorAvatar != null}" th:src="${b.quotedAuthorAvatar}" alt="" />
+                <span class="quote-name" th:text="${b.quotedAuthorName}">이름</span>
+                <span class="quote-handle" th:text="'@' + ${b.quotedAuthorHandle}">@handle</span>
+            </div>
+            <div class="quote-text" th:text="${b.quotedText}">인용된 트윗</div>
+        </a>
+        <div class="meta">
+            <span th:text="${b.displayCreatedAt}">작성일</span>
+            <a th:href="'https://x.com/i/status/' + ${b.tweetId}" target="_blank" rel="noopener">원본 보기 →</a>
+        </div>
+        <div class="tags-row" th:attr="data-tweet-id=${b.tweetId}, data-folder-id=${b.folderId}">
+            <div class="tag-list">
+                <a class="tag-pill" th:each="t : ${b.tags}" th:href="@{/tags/{tag}(tag=${t})}" th:text="${t}">태그</a>
+                <a th:if="${b.folderName != null}" class="folder-badge" th:href="@{/folders/{id}(id=${b.folderId})}"
+                   th:text="${b.folderName}">폴더</a>
+            </div>
+            <button type="button" class="tag-edit-toggle">태그 수정</button>
+            <button type="button" class="folder-toggle">폴더</button>
+            <button type="button" class="archive-toggle" th:attr="data-archived=${b.archived}"
+                    th:text="${b.archived} ? '복원' : '보관'">보관</button>
+            <button type="button" class="permanent-delete-btn">영구 삭제</button>
+            <div class="tag-edit-row">
+                <input type="text" class="tag-edit-input" placeholder="태그를 콤마로 구분해서 입력" />
+                <button type="button" class="tag-save-btn">저장</button>
+            </div>
+            <div class="folder-picker-row">
+                <select class="folder-select"></select>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

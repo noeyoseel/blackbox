@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox · 태그 정리</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <a href="/tags" class="back-link">← 태그 목록</a>
+    <h1>태그 정리</h1>
+    <div class="tagline">비슷한 의미의 태그들을 Claude가 그룹으로 묶어서 병합안을 제안합니다. 그룹별로 확인하고 적용하세요.</div>
+
+    <button id="suggest-btn" type="button" class="tag-save-btn" style="padding:10px 18px; font-size:13px;">
+        병합안 제안받기
+    </button>
+    <div id="status" style="margin-top:12px; font-size:13px; color:var(--muted);"></div>
+
+    <div id="groups" style="margin-top:24px; display:flex; flex-direction:column; gap:14px;"></div>
+
+    <script>
+        const suggestBtn = document.getElementById("suggest-btn");
+        const statusEl = document.getElementById("status");
+        const groupsEl = document.getElementById("groups");
+
+        function renderGroup(group, index) {
+            const card = document.createElement("div");
+            card.className = "chart-card";
+            card.style.padding = "18px 20px";
+
+            const nameRow = document.createElement("div");
+            nameRow.style.display = "flex";
+            nameRow.style.alignItems = "center";
+            nameRow.style.gap = "8px";
+            nameRow.style.marginBottom = "10px";
+
+            const nameInput = document.createElement("input");
+            nameInput.className = "tag-edit-input";
+            nameInput.value = group.canonicalTag;
+            nameInput.style.flex = "1";
+
+            const applyBtn = document.createElement("button");
+            applyBtn.className = "tag-save-btn";
+            applyBtn.textContent = "이 그룹 병합";
+
+            nameRow.appendChild(nameInput);
+            nameRow.appendChild(applyBtn);
+            card.appendChild(nameRow);
+
+            const checksWrap = document.createElement("div");
+            checksWrap.style.display = "flex";
+            checksWrap.style.flexWrap = "wrap";
+            checksWrap.style.gap = "10px";
+
+            group.tags.forEach((tag) => {
+                const label = document.createElement("label");
+                label.style.display = "inline-flex";
+                label.style.alignItems = "center";
+                label.style.gap = "5px";
+                label.style.fontSize = "12px";
+                label.style.color = "var(--ink-soft)";
+
+                const cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.checked = true;
+                cb.value = tag;
+
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(tag));
+                checksWrap.appendChild(label);
+            });
+            card.appendChild(checksWrap);
+
+            const resultEl = document.createElement("div");
+            resultEl.style.fontSize = "12px";
+            resultEl.style.color = "var(--muted)";
+            resultEl.style.marginTop = "8px";
+            card.appendChild(resultEl);
+
+            applyBtn.addEventListener("click", async () => {
+                const selectedTags = Array.from(
+                    checksWrap.querySelectorAll("input[type=checkbox]:checked")
+                ).map((cb) => cb.value);
+
+                if (selectedTags.length < 2) {
+                    resultEl.textContent = "2개 이상 선택해야 병합할 수 있습니다.";
+                    return;
+                }
+
+                applyBtn.disabled = true;
+                applyBtn.textContent = "적용 중...";
+                try {
+                    const res = await fetch("/api/tags/merge", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            canonicalTag: nameInput.value.trim(),
+                            tags: selectedTags,
+                        }),
+                    });
+                    if (!res.ok) throw new Error("병합 실패: " + res.status);
+                    const data = await res.json();
+                    resultEl.textContent = `완료 — ${data.updatedBookmarks}건 반영됨`;
+                    applyBtn.textContent = "적용됨";
+                } catch (err) {
+                    console.error(err);
+                    resultEl.textContent = "병합에 실패했습니다.";
+                    applyBtn.disabled = false;
+                    applyBtn.textContent = "이 그룹 병합";
+                }
+            });
+
+            return card;
+        }
+
+        suggestBtn.addEventListener("click", async () => {
+            suggestBtn.disabled = true;
+            statusEl.textContent = "Claude가 태그를 분석하고 있습니다... (태그가 많으면 시간이 좀 걸릴 수 있어요)";
+            groupsEl.innerHTML = "";
+            try {
+                const res = await fetch("/api/tags/merge-suggestions", { method: "POST" });
+                if (!res.ok) throw new Error("제안 요청 실패: " + res.status);
+                const groups = await res.json();
+                if (groups.length === 0) {
+                    statusEl.textContent = "병합할 만한 비슷한 태그를 찾지 못했습니다.";
+                } else {
+                    statusEl.textContent = `${groups.length}개의 병합 그룹을 제안받았습니다.`;
+                    groups.forEach((group, i) => groupsEl.appendChild(renderGroup(group, i)));
+                }
+            } catch (err) {
+                console.error(err);
+                statusEl.textContent = "제안을 받아오는 데 실패했습니다.";
+            } finally {
+                suggestBtn.disabled = false;
+            }
+        });
+    </script>
+
+</body>
+</html>

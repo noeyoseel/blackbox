@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox · 태그</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1>태그별로 보기</h1>
+    <div class="tagline">
+        <a href="/" style="color:var(--muted); text-decoration:none;">← 피드로</a>
+        &nbsp;·&nbsp;
+        <a href="/tags/merge" style="color:var(--accent); text-decoration:none;">태그 정리하기 →</a>
+    </div>
+
+    <div th:if="${#lists.isEmpty(tags)}" class="empty">아직 태깅된 북마크가 없습니다.</div>
+    <div class="tag-grid" th:unless="${#lists.isEmpty(tags)}">
+        <a th:each="t : ${tags}"
+           th:href="@{/tags/{tag}(tag=${t.tag()})}"
+           class="tag-chip">
+            <span th:text="${t.tag()}">태그</span>
+            <span class="count" th:text="${t.count()}">0</span>
+        </a>
+    </div>
+
+</body>
+</html>

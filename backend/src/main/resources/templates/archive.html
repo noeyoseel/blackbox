@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox · 보관함</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1>보관함</h1>
+    <div class="tagline">피드에서 정리한 글들입니다. 복원하면 다시 피드에 나타납니다.</div>
+
+    <div th:if="${#lists.isEmpty(bookmarks)}" class="empty">보관된 북마크가 없습니다.</div>
+    <div class="bookmark-list archive-view" th:unless="${#lists.isEmpty(bookmarks)}">
+        <th:block th:each="b : ${bookmarks}">
+            <div th:replace="~{fragments/bookmark-card :: card(${b})}"></div>
+        </th:block>
+    </div>
+
+    <script src="/js/tag-editor.js"></script>
+    <script src="/js/archive-toggle.js"></script>
+    <script src="/js/folder-picker.js"></script>
+    <script src="/js/permanent-delete.js"></script>
+</body>
+</html>

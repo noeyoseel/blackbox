@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1>내 북마크</h1>
+    <div class="tagline">
+        <span th:if="${sort == 'oldest'}">오래전에 저장한 순서대로 보여줍니다.</span>
+        <span th:unless="${sort == 'oldest'}">최근에 저장한 순서대로 보여줍니다.</span>
+        &nbsp;·&nbsp;
+        <a th:href="@{/(sort=newest)}" th:classappend="${sort != 'oldest'} ? 'sort-active' : ''" class="sort-link">최신순</a>
+        &nbsp;
+        <a th:href="@{/(sort=oldest)}" th:classappend="${sort == 'oldest'} ? 'sort-active' : ''" class="sort-link">오래된순</a>
+    </div>
+
+    <div th:if="${#lists.isEmpty(bookmarks)}" class="empty">아직 수집된 북마크가 없습니다.</div>
+
+    <div id="feed-list" class="bookmark-list" th:unless="${#lists.isEmpty(bookmarks)}">
+        <th:block th:each="b : ${bookmarks}">
+            <div th:replace="~{fragments/bookmark-card :: card(${b})}"></div>
+        </th:block>
+    </div>
+
+    <div id="feed-sentinel" style="text-align:center; min-height:40px; color:var(--muted); font-size:13px;"></div>
+
+    <script th:inline="javascript">
+        const initialPage = 0;
+        const pageSize = /*[[${pageSize}]]*/ 20;
+        let hasMore = /*[[${hasMore}]]*/ false;
+        const feedSort = /*[[${sort}]]*/ 'newest';
+    </script>
+    <script src="/js/tag-editor.js"></script>
+    <script src="/js/archive-toggle.js"></script>
+    <script src="/js/folder-picker.js"></script>
+    <script src="/js/feed.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:fragment="head-assets">
+        <link rel="stylesheet" as="style" crossorigin
+              href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;1,400&display=swap" />
+        <link rel="stylesheet" href="/css/blackbox.css" />
+        <script src="/js/ui-dialog.js"></script>
+        <script src="/js/image-lightbox.js"></script>
+    </th:block>
+</head>
+<body>
+    <th:block th:fragment="header">
+        <div class="header-row">
+            <a class="logo" href="/" style="text-decoration:none">
+                <svg width="30" height="30" viewBox="0 0 64 64" fill="none">
+                    <rect class="logo-page-back" x="10" y="8" width="38" height="48" rx="2" fill="none" stroke-width="1"></rect>
+                    <rect class="logo-page-front" x="16" y="14" width="38" height="48" rx="2" fill="none" stroke-width="1.2"></rect>
+                    <line class="logo-thread" x1="35" y1="8" x2="35" y2="28" stroke-width="1" stroke-linecap="round"></line>
+                    <circle class="logo-thread" cx="35" cy="30" r="2"></circle>
+                    <line class="logo-text-line" x1="22" y1="26" x2="46" y2="26" stroke-width="0.8" stroke-linecap="round"></line>
+                    <line class="logo-text-line" x1="22" y1="32" x2="40" y2="32" stroke-width="0.8" stroke-linecap="round"></line>
+                    <line class="logo-text-line" x1="22" y1="38" x2="44" y2="38" stroke-width="0.8" stroke-linecap="round"></line>
+                </svg>
+                <span class="wordmark"><span class="wordmark-black">black</span><span class="wordmark-box">box</span></span>
+            </a>
+            <form class="search-form" action="/search" method="get">
+                <input type="text" name="q" placeholder="키워드 검색" class="search-input" />
+            </form>
+            <nav class="nav-links">
+                <a href="/tags">태그</a>
+                <a href="/folders">폴더</a>
+                <a href="/archive">보관함</a>
+                <a href="/stats">통계</a>
+            </nav>
+        </div>
+    </th:block>
+</body>
+</html>

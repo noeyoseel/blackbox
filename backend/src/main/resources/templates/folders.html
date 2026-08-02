@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox · 폴더</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1>폴더별로 보기</h1>
+    <div class="tagline">
+        <a href="/" style="color:var(--muted); text-decoration:none;">← 피드로</a>
+        &nbsp;·&nbsp;
+        <button id="new-folder-btn" type="button" style="color:var(--accent); background:none; border:none; padding:0; font-family:inherit; font-size:14px; cursor:pointer; text-decoration:none;">+ 새 폴더 만들기</button>
+    </div>
+
+    <div id="folders-empty" class="empty" th:if="${#lists.isEmpty(folders)}">아직 만든 폴더가 없습니다.</div>
+    <div id="folder-grid" class="folder-list" th:unless="${#lists.isEmpty(folders)}">
+        <div class="folder-item" th:each="f : ${folders}">
+            <a th:href="@{/folders/{id}(id=${f.id()})}" class="tag-chip">
+                <span th:text="${f.name()}">폴더</span>
+                <span class="count" th:text="${f.count()}">0</span>
+            </a>
+            <button type="button" class="tag-edit-toggle folder-rename-btn"
+                    th:attr="data-folder-id=${f.id()}, data-folder-name=${f.name()}">수정</button>
+            <button type="button" class="tag-edit-toggle folder-delete-btn"
+                    th:attr="data-folder-id=${f.id()}">삭제</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("new-folder-btn").addEventListener("click", async () => {
+            const name = await showPrompt("새 폴더 이름을 입력하세요");
+            if (!name || !name.trim()) return;
+            try {
+                const res = await fetch("/api/folders", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: name.trim() }),
+                });
+                if (!res.ok) throw new Error("폴더 생성 실패: " + res.status);
+                location.reload();
+            } catch (err) {
+                console.error(err);
+                showToast("폴더 생성에 실패했습니다.", "error");
+            }
+        });
+    </script>
+    <script src="/js/folder-actions.js"></script>
+</body>
+</html>

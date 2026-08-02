@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title th:text="'blackbox · 검색: ' + ${q}">blackbox · 검색</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1 th:text="'&quot;' + ${q} + '&quot;'">검색어</h1>
+    <div class="tagline" th:text="${#lists.size(results)} + '건 찾음'">0건</div>
+
+    <div th:if="${#strings.isEmpty(q)}" class="empty">헤더의 검색창에 키워드를 입력해보세요.</div>
+    <div th:if="${not #strings.isEmpty(q) and #lists.isEmpty(results)}" class="empty">일치하는 북마크가 없습니다.</div>
+
+    <div class="bookmark-list" th:unless="${#lists.isEmpty(results)}">
+        <th:block th:each="b : ${results}">
+            <div th:replace="~{fragments/bookmark-card :: card(${b})}"></div>
+        </th:block>
+    </div>
+
+    <script src="/js/tag-editor.js"></script>
+    <script src="/js/archive-toggle.js"></script>
+    <script src="/js/folder-picker.js"></script>
+</body>
+</html>

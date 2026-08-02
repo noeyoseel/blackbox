@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title th:text="'blackbox · ' + ${tag}">blackbox · 태그</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <a href="/tags" class="back-link">← 태그 목록</a>
+    <h1 th:text="${tag}">태그</h1>
+    <div class="tagline" th:text="${#lists.size(bookmarks)} + '건'">0건</div>
+
+    <div th:if="${#lists.isEmpty(bookmarks)}" class="empty">이 태그가 붙은 북마크가 없습니다.</div>
+    <div class="bookmark-list" th:unless="${#lists.isEmpty(bookmarks)}">
+        <th:block th:each="b : ${bookmarks}">
+            <div th:replace="~{fragments/bookmark-card :: card(${b})}"></div>
+        </th:block>
+    </div>
+
+    <script src="/js/tag-editor.js"></script>
+    <script src="/js/archive-toggle.js"></script>
+    <script src="/js/folder-picker.js"></script>
+</body>
+</html>

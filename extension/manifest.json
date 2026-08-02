@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Twitter Bookmark Drawer (Prototype)",
+  "version": "0.0.1",
+  "description": "패시브 인터셉션 방식 북마크 수집 프로토타입 - GraphQL 응답 가로채기 검증용",
+  "permissions": ["scripting", "storage", "activeTab", "downloads"],
+  "host_permissions": ["https://x.com/*", "https://twitter.com/*", "http://localhost:8080/*"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*/bookmarks*", "https://twitter.com/*/bookmarks*"],
+      "js": ["page-hook.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://x.com/*/bookmarks*", "https://twitter.com/*/bookmarks*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
