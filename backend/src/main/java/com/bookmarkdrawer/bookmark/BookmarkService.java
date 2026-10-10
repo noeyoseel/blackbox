@@ -1,9 +1,8 @@
 package com.bookmarkdrawer.bookmark;
 
-import com.bookmarkdrawer.folder.Folder;
-import com.bookmarkdrawer.folder.FolderRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,7 +21,6 @@ import java.util.stream.Collectors;
 public class BookmarkService {
 
     private final BookmarkRepository bookmarkRepository;
-    private final FolderRepository folderRepository;
 
     @Transactional
     public BookmarkIngestResponse ingest(List<TweetPayload> tweets) {
@@ -75,18 +73,37 @@ public class BookmarkService {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    public FeedPage feed(int page, int size, String sort) {
+    // contentType/tag는 모두 선택적 필터다(홈의 "필터" 패널). 둘 다 비어있으면
+    // 기존 무필터 피드 쿼리를 그대로 쓰고, 하나라도 있으면 필터 쿼리로 분기한다.
+    public FeedPage feed(int page, int size, String sort, ContentType contentType, String tag) {
         // size+1을 Pageable의 페이지 크기로 쓰면 offset(= page * pageSize)이 페이지마다
         // size만큼씩 어긋나서, 스크롤을 계속하면 항목을 건너뛰다가 실제로는 더 남았는데도
         // hasMore가 false가 되는 버그가 있었다. offset은 size로 정확히 계산하고,
         // hasMore는 전체 개수와 비교해서 별도로 판단한다.
         Pageable pageable = PageRequest.of(page, size);
-        List<Bookmark> items = "oldest".equals(sort)
-                ? bookmarkRepository.findFeedPageOldestFirst(pageable)
-                : bookmarkRepository.findFeedPage(pageable);
-        long total = bookmarkRepository.countByArchivedFalse();
+        String cleanTag = (tag == null || tag.isBlank()) ? null : tag.trim();
+        boolean filtered = contentType != null || cleanTag != null;
+
+        List<Bookmark> items;
+        long total;
+        if (filtered) {
+            items = "oldest".equals(sort)
+                    ? bookmarkRepository.findFilteredFeedOldestFirst(contentType, cleanTag, pageable)
+                    : bookmarkRepository.findFilteredFeed(contentType, cleanTag, pageable);
+            total = bookmarkRepository.countFilteredFeed(contentType, cleanTag);
+        } else {
+            items = "oldest".equals(sort)
+                    ? bookmarkRepository.findFeedPageOldestFirst(pageable)
+                    : bookmarkRepository.findFeedPage(pageable);
+            total = bookmarkRepository.countByArchivedFalse();
+        }
         boolean hasMore = (long) (page + 1) * size < total;
         return new FeedPage(items, hasMore);
+    }
+
+    // 홈 상단 "AI로 북마크 정리하기" 배너 노출 여부 판단용.
+    public long countUnclassified() {
+        return bookmarkRepository.countByArchivedFalseAndContentTypeIsNull();
     }
 
     @Transactional
@@ -145,16 +162,92 @@ public class BookmarkService {
     }
 
     @Transactional
-    public void assignFolder(String tweetId, Long folderId) {
+    public BookmarkMetadataView updateMetadata(String tweetId, ContentType contentType, String place) {
         Bookmark bookmark = bookmarkRepository.findByTweetId(tweetId)
                 .orElseThrow(() -> new EntityNotFoundException("트윗을 찾을 수 없음: " + tweetId));
-        if (folderId == null) {
-            bookmark.assignFolder(null, null);
-        } else {
-            Folder folder = folderRepository.findById(folderId)
-                    .orElseThrow(() -> new EntityNotFoundException("폴더를 찾을 수 없음: " + folderId));
-            bookmark.assignFolder(folder.getId(), folder.getName());
-        }
+        bookmark.applyMetadata(contentType, place);
         bookmarkRepository.save(bookmark);
+        return new BookmarkMetadataView(bookmark.getTweetId(), bookmark.getContentType(), bookmark.getPlace());
+    }
+
+    // 정리 모드 필터 조회. tagged 플래그가 아니라 tags IS EMPTY로 "태그 없음"을 판단한다
+    // (Bookmark.applyTags는 빈 태그로도 tagged=true를 남기므로 tagged는 이 목적에 안 맞음).
+    public OrganizePage organize(OrganizeFilter filter, int page, int size, String sort) {
+        Pageable pageable = PageRequest.of(page, size);
+        boolean oldest = "oldest".equals(sort);
+        Page<Bookmark> result = switch (filter) {
+            case NO_TAG -> oldest
+                    ? bookmarkRepository.findNoTagCandidatesOldestFirst(pageable)
+                    : bookmarkRepository.findNoTagCandidates(pageable);
+            case NO_CONTENT_TYPE -> oldest
+                    ? bookmarkRepository.findNoContentTypeCandidatesOldestFirst(pageable)
+                    : bookmarkRepository.findNoContentTypeCandidates(pageable);
+            case CANDIDATES -> oldest
+                    ? bookmarkRepository.findAllCandidatesOldestFirst(pageable)
+                    : bookmarkRepository.findAllCandidates(pageable);
+        };
+        return new OrganizePage(result.getContent(), result.hasNext(), result.getTotalElements());
+    }
+
+    // 아래 세 배치 메서드는 TagMergeService.applyMerge()와 같은 구조를 따른다:
+    // tweetId로 대상을 모아(findByTweetIdIn) 메모리에서 도메인 메서드로 변경한 뒤 saveAll로 한 번에 반영.
+    // 존재하지 않는 tweetId는 조용히 건너뛰고 notFound로만 보고한다(선택 당시와 처리 시점 사이에
+    // 다른 곳에서 삭제/변경됐을 수 있으므로, 부분 실패로 전체 배치를 막지 않기 위함).
+
+    @Transactional
+    public BatchActionResult batchAddTags(List<String> tweetIds, List<String> tagsToAdd) {
+        List<String> cleanedNewTags = tagsToAdd.stream()
+                .map(String::trim)
+                .filter(t -> !t.isEmpty())
+                .toList();
+        List<Bookmark> found = bookmarkRepository.findByTweetIdIn(new LinkedHashSet<>(tweetIds));
+        for (Bookmark bookmark : found) {
+            Set<String> merged = new LinkedHashSet<>(bookmark.getTags());
+            merged.addAll(cleanedNewTags);
+            bookmark.applyTags(merged);
+        }
+        bookmarkRepository.saveAll(found);
+        return buildBatchResult(tweetIds, found);
+    }
+
+    // 배치 태그/보관과 달리 부분 업데이트다: contentType이 요청에 없으면(null) 손대지
+    // 않고, place는 null이면 손대지 않지만 빈 문자열이면 명시적으로 지운다. "유형 지정"과
+    // "장소 지정"이 액션바에서 서로 독립된 컨트롤이라, 하나만 바꿔도 다른 북마크들의 기존
+    // 값을 실수로 날리지 않아야 하기 때문이다(개별 편집은 폼 하나에서 항상 둘 다 같이
+    // 제출되므로 이 문제가 없어 Bookmark.applyMetadata를 그대로 씀).
+    @Transactional
+    public BatchActionResult batchUpdateMetadata(List<String> tweetIds, ContentType contentType, String place) {
+        List<Bookmark> found = bookmarkRepository.findByTweetIdIn(new LinkedHashSet<>(tweetIds));
+        for (Bookmark bookmark : found) {
+            ContentType nextContentType = contentType != null ? contentType : bookmark.getContentType();
+            String nextPlace = bookmark.getPlace();
+            if (place != null) {
+                nextPlace = place.isBlank() ? null : place.trim();
+            }
+            bookmark.applyMetadata(nextContentType, nextPlace);
+        }
+        bookmarkRepository.saveAll(found);
+        return buildBatchResult(tweetIds, found);
+    }
+
+    @Transactional
+    public BatchActionResult batchSetArchived(List<String> tweetIds, boolean archived) {
+        List<Bookmark> found = bookmarkRepository.findByTweetIdIn(new LinkedHashSet<>(tweetIds));
+        for (Bookmark bookmark : found) {
+            bookmark.setArchived(archived);
+        }
+        bookmarkRepository.saveAll(found);
+        return buildBatchResult(tweetIds, found);
+    }
+
+    private BatchActionResult buildBatchResult(List<String> requestedTweetIds, List<Bookmark> found) {
+        Set<String> foundIds = found.stream()
+                .map(Bookmark::getTweetId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<String> notFound = requestedTweetIds.stream()
+                .distinct()
+                .filter(id -> !foundIds.contains(id))
+                .toList();
+        return new BatchActionResult(requestedTweetIds.size(), new ArrayList<>(foundIds), notFound);
     }
 }

@@ -162,6 +162,14 @@
     isFirstBatch = false;
   });
 
+  // 자동 종료든 수동 중지든, 수집 세션이 끝나는 시점은 여기 하나로 모은다 — 이 시점에
+  // 백엔드로 "이번 세션 수집 끝났다"는 신호를 보내 미분류 북마크에 AI 자동 태깅을 걸 수 있게 한다.
+  function stopCollecting() {
+    collecting = false;
+    updateButton();
+    chrome.runtime.sendMessage({ type: "COLLECTION_FINISHED" });
+  }
+
   async function autoScrollLoop() {
     while (collecting) {
       window.scrollTo(0, document.body.scrollHeight);
@@ -174,8 +182,7 @@
         console.log(
           `[bookmark-drawer] 수집 종료 (연속 무응답: ${noNewDataStreak})`
         );
-        collecting = false;
-        updateButton();
+        stopCollecting();
       }
     }
   }
@@ -213,8 +220,7 @@
     btn.addEventListener("click", () => {
       if (collecting) {
         console.log(`[bookmark-drawer] 수집 수동 중단 (누적 ${seenTweetIds.size}건)`);
-        collecting = false;
-        updateButton();
+        stopCollecting();
         return;
       }
       collecting = true;

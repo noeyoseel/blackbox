@@ -33,3 +33,12 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+// 판매자(나) 전용 라이선스 발급 도구. 사용법:
+//   BLACKBOX_LICENSE_PRIVATE_KEY=<base64 개인키> ./gradlew generateLicense --args="email plan"
+tasks.register<JavaExec>("generateLicense") {
+    group = "license"
+    description = "라이선스 키 발급 (BLACKBOX_LICENSE_PRIVATE_KEY 환경변수 필요)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.bookmarkdrawer.license.LicenseGenerator")
+}

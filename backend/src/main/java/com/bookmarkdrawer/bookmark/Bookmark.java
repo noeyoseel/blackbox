@@ -14,9 +14,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Entity
-@Table(name = "bookmark")
+@Table(name = "bookmark", indexes = {
+        // 정리 모드 필터들의 공통 ORDER BY와 기존 피드 정렬(findFeedPage류)이 함께 쓴다.
+        @Index(name = "idx_bookmark_archived_order", columnList = "archived, bookmark_order, collected_at")
+})
 @Getter
 @NoArgsConstructor
 public class Bookmark {
@@ -82,16 +87,19 @@ public class Bookmark {
     @Column(name = "archived", nullable = false)
     private boolean archived = false;
 
-    // 글 하나는 폴더 하나에만 속한다(태그는 다중 라벨, 폴더는 단일 버킷). 실제 연관관계 대신
-    // id/name을 그대로 저장해서 JSON 직렬화·지연로딩 이슈 없이 단순하게 다룬다.
-    @Column(name = "folder_id")
-    private Long folderId;
+    // 태그(자유 주제 키워드)만으로는 "맛집/카페/디저트"처럼 표기가 들쭉날쭉해서 안정적으로
+    // 필터링하기 어렵다. contentType/place는 AI가 콘텐츠에서 뽑아낼(다음 단계) 구조화된
+    // 필터 축이다. 기존 북마크를 일괄로 채우지 않으므로 둘 다 nullable.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_type", length = 20)
+    private ContentType contentType;
 
-    @Column(name = "folder_name", length = 64)
-    private String folderName;
+    @Column(name = "place", length = 255)
+    private String place;
 
     @ElementCollection
-    @CollectionTable(name = "bookmark_tag", joinColumns = @JoinColumn(name = "bookmark_id"))
+    @CollectionTable(name = "bookmark_tag", joinColumns = @JoinColumn(name = "bookmark_id"),
+            indexes = @Index(name = "idx_bookmark_tag_bookmark_id", columnList = "bookmark_id"))
     @Column(name = "tag")
     private Set<String> tags = new HashSet<>();
 
@@ -131,9 +139,82 @@ public class Bookmark {
         this.archived = archived;
     }
 
-    public void assignFolder(Long folderId, String folderName) {
-        this.folderId = folderId;
-        this.folderName = folderId != null ? folderName : null;
+    public void applyMetadata(ContentType contentType, String place) {
+        this.contentType = contentType;
+        this.place = (place == null || place.isBlank()) ? null : place.trim();
+    }
+
+    // 트위터 API가 본문에 HTML 엔티티(&lt; &gt; &amp; 등)를 이스케이프해서 내려주는 경우가 있다
+    // (예: 사용자가 실제로 "<제목>"이라고 썼으면 응답엔 "&lt;제목&gt;"로 옴). 저장은 그 원문
+    // 그대로 하고, 읽을 때 여기서 한 번만 디코딩한다 — Thymeleaf th:text/JS textContent가 이미
+    // 안전하게 한 번 이스케이프해 주므로, 저장 단계에서 미리 디코딩해두면 화면에 "&lt;제목&gt;"이
+    // 그대로 텍스트로 보이는 이중 이스케이프 없이 원래 문자(<제목>)로 보인다.
+    public String getText() {
+        return decodeHtmlEntities(text);
+    }
+
+    public String getQuotedText() {
+        return decodeHtmlEntities(quotedText);
+    }
+
+    private static String decodeHtmlEntities(String s) {
+        if (s == null || s.indexOf('&') < 0) return s;
+        return s.replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&apos;", "'")
+                .replace("&amp;", "&");
+    }
+
+    // 본문 안의 URL을 클릭 가능한 링크로 바꾼 안전한 HTML. 인용 트윗 미리보기(quotedText)는
+    // 이미 그 자체가 <a class="quote-card">로 감싸여 있어서 여기서 또 링크를 넣으면 앵커 중첩이
+    // 되므로 대상에서 뺐다 — 본문(text)만 링크화한다. Thymeleaf th:utext와 클라이언트
+    // innerHTML 양쪽에서 그대로 쓸 수 있도록, URL이 아닌 부분은 전부 이스케이프해서 반환한다.
+    private static final Pattern URL_PATTERN = Pattern.compile("https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+");
+
+    public String getTextHtml() {
+        return linkify(getText());
+    }
+
+    private static String linkify(String text) {
+        if (text == null) return "";
+        Matcher m = URL_PATTERN.matcher(text);
+        StringBuilder sb = new StringBuilder();
+        int last = 0;
+        while (m.find()) {
+            int start = m.start();
+            int end = m.end();
+            // URL 뒤에 바로 붙은 문장부호는 URL의 일부가 아닐 확률이 높아 링크에서 뺀다.
+            while (end > start && ".,)]!?;:\"'".indexOf(text.charAt(end - 1)) >= 0) {
+                end--;
+            }
+            if (end <= start) continue;
+            sb.append(escapeHtml(text.substring(last, start)));
+            String escapedUrl = escapeHtml(text.substring(start, end));
+            sb.append("<a href=\"").append(escapedUrl)
+                    .append("\" target=\"_blank\" rel=\"noopener\">")
+                    .append(escapedUrl).append("</a>");
+            last = end;
+        }
+        sb.append(escapeHtml(text.substring(last)));
+        return sb.toString();
+    }
+
+    private static String escapeHtml(String s) {
+        StringBuilder out = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '&' -> out.append("&amp;");
+                case '<' -> out.append("&lt;");
+                case '>' -> out.append("&gt;");
+                case '"' -> out.append("&quot;");
+                case '\'' -> out.append("&#39;");
+                default -> out.append(c);
+            }
+        }
+        return out.toString();
     }
 
     // 화면에 표시할, 한국 표준시로 변환된 작성 시각. 파싱 실패 시 원본 문자열을 그대로 보여준다.

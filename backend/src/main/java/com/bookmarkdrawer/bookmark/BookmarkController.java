@@ -22,8 +22,10 @@ public class BookmarkController {
     @GetMapping("/feed")
     public FeedPage feed(@RequestParam(defaultValue = "0") int page,
                           @RequestParam(defaultValue = "20") int size,
-                          @RequestParam(defaultValue = "newest") String sort) {
-        return bookmarkService.feed(page, size, sort);
+                          @RequestParam(defaultValue = "newest") String sort,
+                          @RequestParam(required = false) ContentType contentType,
+                          @RequestParam(required = false) String tag) {
+        return bookmarkService.feed(page, size, sort, contentType, tag);
     }
 
     @PatchMapping("/{tweetId}/tags")
@@ -44,10 +46,10 @@ public class BookmarkController {
         }
     }
 
-    @PatchMapping("/{tweetId}/folder")
-    public void assignFolder(@PathVariable String tweetId, @RequestBody AssignFolderRequest request) {
+    @PatchMapping("/{tweetId}/metadata")
+    public BookmarkMetadataView updateMetadata(@PathVariable String tweetId, @RequestBody UpdateMetadataRequest request) {
         try {
-            bookmarkService.assignFolder(tweetId, request.folderId());
+            return bookmarkService.updateMetadata(tweetId, request.contentType(), request.place());
         } catch (EntityNotFoundException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         }
@@ -67,5 +69,28 @@ public class BookmarkController {
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
         }
+    }
+
+    @GetMapping("/organize")
+    public OrganizePage organize(@RequestParam(defaultValue = "candidates") String filter,
+                                  @RequestParam(defaultValue = "0") int page,
+                                  @RequestParam(defaultValue = "20") int size,
+                                  @RequestParam(defaultValue = "oldest") String sort) {
+        return bookmarkService.organize(OrganizeFilter.from(filter), page, size, sort);
+    }
+
+    @PatchMapping("/batch/tags")
+    public BatchActionResult batchAddTags(@Valid @RequestBody BatchTagRequest request) {
+        return bookmarkService.batchAddTags(request.tweetIds(), request.tagsToAdd());
+    }
+
+    @PatchMapping("/batch/archive")
+    public BatchActionResult batchSetArchived(@Valid @RequestBody BatchArchiveRequest request) {
+        return bookmarkService.batchSetArchived(request.tweetIds(), request.archived());
+    }
+
+    @PatchMapping("/batch/metadata")
+    public BatchActionResult batchUpdateMetadata(@Valid @RequestBody BatchMetadataRequest request) {
+        return bookmarkService.batchUpdateMetadata(request.tweetIds(), request.contentType(), request.place());
     }
 }

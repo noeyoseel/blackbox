@@ -10,33 +10,180 @@
 
     <h1>내 북마크</h1>
     <div class="tagline">
-        <span th:if="${sort == 'oldest'}">오래전에 저장한 순서대로 보여줍니다.</span>
-        <span th:unless="${sort == 'oldest'}">최근에 저장한 순서대로 보여줍니다.</span>
-        &nbsp;·&nbsp;
-        <a th:href="@{/(sort=newest)}" th:classappend="${sort != 'oldest'} ? 'sort-active' : ''" class="sort-link">최신순</a>
-        &nbsp;
-        <a th:href="@{/(sort=oldest)}" th:classappend="${sort == 'oldest'} ? 'sort-active' : ''" class="sort-link">오래된순</a>
-    </div>
-
-    <div th:if="${#lists.isEmpty(bookmarks)}" class="empty">아직 수집된 북마크가 없습니다.</div>
-
-    <div id="feed-list" class="bookmark-list" th:unless="${#lists.isEmpty(bookmarks)}">
-        <th:block th:each="b : ${bookmarks}">
-            <div th:replace="~{fragments/bookmark-card :: card(${b})}"></div>
+        <th:block th:if="${mode == 'organize'}">태그가 없는 북마크부터 훑어보고, 여러 개를 골라 한 번에 정리하세요.</th:block>
+        <th:block th:unless="${mode == 'organize'}">
+            <span th:if="${sort == 'oldest'}">오래전에 저장한 순서대로 보여줍니다.</span>
+            <span th:unless="${sort == 'oldest'}">최근에 저장한 순서대로 보여줍니다.</span>
+            &nbsp;·&nbsp;
+            <a th:href="@{/feed(sort=newest, contentType=${contentType}, tag=${tag})}"
+               th:classappend="${sort != 'oldest'} ? 'sort-active' : ''" class="sort-link">최신순</a>
+            &nbsp;
+            <a th:href="@{/feed(sort=oldest, contentType=${contentType}, tag=${tag})}"
+               th:classappend="${sort == 'oldest'} ? 'sort-active' : ''" class="sort-link">오래된순</a>
         </th:block>
     </div>
 
-    <div id="feed-sentinel" style="text-align:center; min-height:40px; color:var(--muted); font-size:13px;"></div>
+    <div class="home-controls">
+        <button id="filter-toggle-btn" type="button" class="home-control-btn" th:unless="${mode == 'organize'}">필터</button>
+        <a th:href="@{/feed(mode=organize, sort=${sort})}" class="home-control-btn" th:unless="${mode == 'organize'}">정리 모드</a>
+        <a th:href="@{/feed(sort=${sort})}" class="home-control-btn home-control-btn-active" th:if="${mode == 'organize'}">← 정리 모드 종료</a>
+    </div>
+
+    <form id="filter-panel" class="filter-panel" method="get" action="/feed" th:unless="${mode == 'organize'}">
+        <div class="filter-panel-row">
+            <label class="filter-field">
+                <span class="filter-field-label">Content Type</span>
+                <select name="contentType">
+                    <option value="">전체</option>
+                    <option value="INFO" th:selected="${contentType != null and contentType.name() == 'INFO'}">정보</option>
+                    <option value="PLACE" th:selected="${contentType != null and contentType.name() == 'PLACE'}">장소</option>
+                    <option value="PRODUCT" th:selected="${contentType != null and contentType.name() == 'PRODUCT'}">제품</option>
+                    <option value="RESOURCE" th:selected="${contentType != null and contentType.name() == 'RESOURCE'}">자료</option>
+                    <option value="OTHER" th:selected="${contentType != null and contentType.name() == 'OTHER'}">기타</option>
+                </select>
+            </label>
+            <label class="filter-field">
+                <span class="filter-field-label">Tag</span>
+                <input type="text" name="tag" list="filter-tag-options" th:value="${tag}" placeholder="태그" />
+                <datalist id="filter-tag-options"></datalist>
+            </label>
+            <input type="hidden" name="sort" th:value="${sort}" />
+            <button type="submit" class="filter-apply-btn">적용</button>
+            <a th:href="@{/feed(sort=${sort})}" class="filter-reset-link"
+               th:if="${contentType != null or (tag != null and !#strings.isEmpty(tag))}">초기화</a>
+        </div>
+    </form>
+
+    <div id="ai-banner" class="ai-banner" th:if="${mode != 'organize' and unclassifiedCount > 0}">
+        <span class="ai-banner-icon">✨</span>
+        <div class="ai-banner-text">
+            <strong>AI로 북마크 정리하기</strong>
+            <span>아직 분류되지 않은 북마크 <b th:text="${unclassifiedCount}">0</b>건을 AI가 분석합니다.</span>
+        </div>
+        <button id="ai-classify-start-btn" type="button" class="ai-banner-btn">분류 시작</button>
+    </div>
+
+    <div id="ai-modal-overlay" class="bx-modal-overlay ai-modal-overlay">
+        <div class="bx-modal-panel ai-modal-panel">
+            <div class="bx-modal-text ai-modal-title">AI 자동 분류</div>
+            <div id="ai-modal-body" class="ai-modal-body"></div>
+            <div class="bx-modal-actions">
+                <button id="ai-modal-close-btn" type="button" class="bx-modal-btn bx-modal-btn-ghost">닫기</button>
+                <button id="ai-modal-apply-btn" type="button" class="bx-modal-btn" style="display:none;">적용하기</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="organize-filter-bar" th:if="${mode == 'organize'}">
+        <a class="organize-filter-tab" th:classappend="${filter == 'candidates'} ? 'active' : ''"
+           th:href="@{/feed(mode=organize, filter=candidates, sort=${sort})}">전체 미정리 후보</a>
+        <a class="organize-filter-tab" th:classappend="${filter == 'no_tag'} ? 'active' : ''"
+           th:href="@{/feed(mode=organize, filter=no_tag, sort=${sort})}">태그 없음</a>
+        <a class="organize-filter-tab" th:classappend="${filter == 'no_content_type'} ? 'active' : ''"
+           th:href="@{/feed(mode=organize, filter=no_content_type, sort=${sort})}">유형 없음</a>
+        <a class="organize-filter-tab" th:classappend="${filter == 'duplicate_exact'} ? 'active' : ''"
+           th:href="@{/feed(mode=organize, filter=duplicate_exact)}">동일 내용 후보</a>
+        <a class="organize-filter-tab" th:classappend="${filter == 'duplicate_near'} ? 'active' : ''"
+           th:href="@{/feed(mode=organize, filter=duplicate_near)}">거의 중복 후보</a>
+        <span id="organize-total-count" th:unless="${isDuplicateView}" class="organize-count" th:text="'정리 대상 ' + ${totalCandidates} + '건'">정리 대상 0건</span>
+    </div>
+    <div class="tagline" th:if="${mode == 'organize' and !isDuplicateView}" style="margin-bottom:24px;">
+        <a th:href="@{/feed(mode=organize, filter=${filter}, sort=oldest)}" class="sort-link" th:classappend="${sort == 'oldest'} ? 'sort-active' : ''">오래된순</a>
+        &nbsp;
+        <a th:href="@{/feed(mode=organize, filter=${filter}, sort=newest)}" class="sort-link" th:classappend="${sort != 'oldest'} ? 'sort-active' : ''">최신순</a>
+    </div>
+
+    <div th:if="${mode == 'organize' and isDuplicateView}" class="duplicate-view">
+        <div class="duplicate-toolbar">
+            <span th:text="${#lists.size(duplicateGroups)} + '개 그룹'">0개 그룹</span>
+            <button id="duplicate-rescan-btn" type="button">다시 찾기</button>
+        </div>
+        <div th:if="${#lists.isEmpty(duplicateGroups)}" class="empty">발견된 후보가 없습니다. "다시 찾기"를 눌러 스캔해보세요.</div>
+        <div id="duplicate-groups" class="duplicate-groups">
+            <div th:each="g : ${duplicateGroups}" class="duplicate-group-block" th:attr="data-group-id=${g.id()}">
+                <div class="duplicate-group-header">
+                    <span class="duplicate-group-type" th:text="${g.type().label}">유형</span>
+                    <span class="duplicate-group-signal" th:text="${g.signal().label}">신호</span>
+                    <span class="duplicate-group-score" th:text="${#numbers.formatDecimal(g.score() * 100, 0, 0)} + '% 유사'">점수</span>
+                </div>
+                <div class="duplicate-group-note" th:text="${g.signal().description}">설명</div>
+                <div class="duplicate-group-members">
+                    <div th:each="m : ${g.members()}" class="duplicate-member">
+                        <input type="checkbox" class="duplicate-member-checkbox" th:value="${m.tweetId}"
+                               th:checked="${g.defaultArchiveTweetIds().contains(m.tweetId)}" />
+                        <div class="duplicate-member-card">
+                            <div th:replace="~{fragments/bookmark-card :: card(${m})}"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="duplicate-group-actions">
+                    <button type="button" class="duplicate-archive-btn">체크된 항목 보관</button>
+                    <button type="button" class="duplicate-dismiss-btn">모두 유지</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="organize-actionbar" th:if="${mode == 'organize' and !isDuplicateView}" class="organize-actionbar">
+        <div class="organize-actionbar-row">
+            <span id="organize-selection-count" class="organize-selection-count">0개 선택됨</span>
+            <button id="organize-select-all" type="button">전체선택</button>
+            <button id="organize-select-none" type="button">선택해제</button>
+            <button id="organize-archive-btn" type="button">보관</button>
+        </div>
+        <button id="organize-classify-toggle" type="button" class="organize-classify-toggle">▸ 분류 일괄 적용</button>
+        <div id="organize-classify-panel" class="organize-classify-panel">
+            <div class="organize-classify-item">
+                <span class="organize-classify-label">태그 추가</span>
+                <input type="text" id="organize-tag-input" placeholder="태그를 콤마로 구분해서 입력" />
+                <button id="organize-tag-confirm-btn" type="button">추가</button>
+            </div>
+            <div class="organize-classify-item">
+                <span class="organize-classify-label">유형 지정</span>
+                <select id="organize-content-type-select">
+                    <option value="">유형 선택...</option>
+                    <option value="INFO">정보</option>
+                    <option value="PLACE">장소</option>
+                    <option value="PRODUCT">제품</option>
+                    <option value="RESOURCE">자료</option>
+                    <option value="OTHER">기타</option>
+                </select>
+            </div>
+            <div class="organize-classify-item">
+                <span class="organize-classify-label">장소 지정</span>
+                <input type="text" id="organize-place-input" placeholder="장소 (비우고 적용하면 삭제)" />
+                <button id="organize-place-apply-btn" type="button">적용</button>
+            </div>
+        </div>
+    </div>
+
+    <div th:if="${!(mode == 'organize' and isDuplicateView)}">
+        <div id="feed-empty" class="empty" th:style="${#lists.isEmpty(bookmarks)} ? '' : 'display:none;'"
+             th:text="${mode == 'organize'} ? '정리할 북마크가 없습니다 🎉' : '아직 수집된 북마크가 없습니다.'">비어있음</div>
+
+        <div id="feed-list" class="bookmark-list" th:classappend="${mode == 'organize'} ? 'organize-mode' : ''"
+             th:style="${#lists.isEmpty(bookmarks)} ? 'display:none;' : ''">
+            <th:block th:each="b : ${bookmarks}">
+                <div th:replace="~{fragments/bookmark-card :: card(${b})}"></div>
+            </th:block>
+        </div>
+
+        <div id="feed-sentinel" style="text-align:center; min-height:40px; color:var(--muted); font-size:13px;"></div>
+    </div>
 
     <script th:inline="javascript">
-        const initialPage = 0;
-        const pageSize = /*[[${pageSize}]]*/ 20;
-        let hasMore = /*[[${hasMore}]]*/ false;
-        const feedSort = /*[[${sort}]]*/ 'newest';
+        const homeMode = /*[[${mode}]]*/ 'feed';
+        const homeFilter = /*[[${filter}]]*/ 'candidates';
+        const homeSort = /*[[${sort}]]*/ 'newest';
+        const homePageSize = /*[[${pageSize}]]*/ 20;
+        let homeHasMore = /*[[${hasMore}]]*/ false;
+        const homeContentType = /*[[${contentType}]]*/ null;
+        const homeTag = /*[[${tag}]]*/ null;
     </script>
     <script src="/js/tag-editor.js"></script>
     <script src="/js/archive-toggle.js"></script>
-    <script src="/js/folder-picker.js"></script>
+    <script src="/js/bookmark-card-render.js"></script>
     <script src="/js/feed.js"></script>
+    <script src="/js/duplicates.js"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <th:block th:fragment="head-assets">
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="stylesheet" as="style" crossorigin
               href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;1,400&display=swap" />
@@ -29,10 +30,8 @@
                 <input type="text" name="q" placeholder="키워드 검색" class="search-input" />
             </form>
             <nav class="nav-links">
-                <a href="/tags">태그</a>
-                <a href="/folders">폴더</a>
+                <a href="/feed">피드</a>
                 <a href="/archive">보관함</a>
-                <a href="/stats">통계</a>
             </nav>
         </div>
     </th:block>

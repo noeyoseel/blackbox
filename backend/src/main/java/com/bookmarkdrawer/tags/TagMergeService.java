@@ -66,9 +66,11 @@ public class TagMergeService {
             return new TagMergeResult(canonicalTag, 0);
         }
 
+        // 보관된 북마크까지 포함해서 통합한다. 활성 북마크만 병합하면 보관함에 옛 표기가
+        // 남아 있다가 복원하는 순간 되살아나서, 방금 정리한 태그 목록이 다시 갈라진다.
         Set<Bookmark> affected = new LinkedHashSet<>();
         for (String tag : sourceTags) {
-            affected.addAll(bookmarkRepository.findByTag(tag));
+            affected.addAll(bookmarkRepository.findByTagIncludingArchived(tag));
         }
 
         for (Bookmark bookmark : affected) {
