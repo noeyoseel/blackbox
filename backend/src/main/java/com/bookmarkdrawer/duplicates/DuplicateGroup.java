@@ -68,4 +68,11 @@ public class DuplicateGroup {
     public void dismiss() {
         this.dismissed = true;
     }
+
+    // 영구 삭제된 북마크를 멤버에서 뺀다(외래키가 없어 그대로 두면 고아 행으로 남는다).
+    // groupKey는 일부러 다시 계산하지 않는다 — 남은 멤버로 재스캔하면 새 키의 그룹이 생기는 것은
+    // 수정 전과 같은 동작이고, 키를 바꾸면 다른 그룹과 unique 충돌할 수 있다.
+    public void removeMember(String tweetId) {
+        this.memberTweetIds.remove(tweetId);
+    }
 }

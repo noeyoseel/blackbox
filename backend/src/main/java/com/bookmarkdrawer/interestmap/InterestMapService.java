@@ -113,10 +113,31 @@ public class InterestMapService {
         Map<String, Bookmark> byId = fetchBookmarks(allRepTweetIds);
         Map<Integer, String> names = loadClusterNames();
 
+        // 표시 수치(전체 수·cluster 크기·미분류 수)는 결과 파일에 저장된 계산 당시 값이 아니라
+        // DB에 지금 남아 있는 북마크 기준으로 센다 — 영구 삭제된 북마크는 cluster 목록·UMAP에서 이미
+        // 빠지므로 숫자도 같은 기준으로 맞춘다. cluster 구성·라벨·좌표 파일은 읽기만 하고 바꾸지 않는다.
+        // 보관된 북마크는 기존처럼 포함한다(DB에 존재하는지만 본다).
+        Set<String> fileTweetIds = new HashSet<>();
+        for (JsonNode c : clusterNodes) {
+            c.path("memberTweetIds").forEach(n -> fileTweetIds.add(n.asText()));
+        }
+        List<String> noiseIds = new ArrayList<>();
+        root.path("noiseTweetIds").forEach(n -> noiseIds.add(n.asText()));
+        fileTweetIds.addAll(noiseIds);
+        Set<String> existing = fileTweetIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(bookmarkRepository.findExistingTweetIds(fileTweetIds));
+
         List<ClusterSummary> clusters = new ArrayList<>();
         for (JsonNode c : clusterNodes) {
             int number = c.path("clusterNumber").asInt();
-            int size = c.path("size").asInt();
+            int size = 0;
+            for (JsonNode n : c.path("memberTweetIds")) {
+                if (existing.contains(n.asText())) size++;
+            }
+            if (size == 0) {
+                continue; // 구성원이 모두 삭제된 cluster는 목록·개수에서 뺀다(UMAP에도 점이 없음).
+            }
             List<BookmarkPreview> previews = effectiveReps.getOrDefault(number, List.of()).stream()
                     .map(byId::get)
                     .filter(Objects::nonNull)
@@ -124,12 +145,13 @@ public class InterestMapService {
                     .toList();
             clusters.add(new ClusterSummary(number, size, names.get(number), previews));
         }
+        // 파일은 크기 내림차순으로 저장돼 있고 화면(상위 5개 강조)이 그 순서를 전제로 하므로, 삭제로
+        // 크기가 바뀐 뒤에도 같은 기준이 되도록 다시 정렬한다(stable sort — 동률은 파일 순서 유지).
+        clusters.sort(Comparator.comparingInt(ClusterSummary::size).reversed());
 
-        return new InterestMapOverview(
-                root.path("totalBookmarks").asInt(),
-                root.path("clusterCount").asInt(),
-                root.path("noiseCount").asInt(),
-                clusters);
+        int noiseCount = (int) noiseIds.stream().filter(existing::contains).count();
+        int totalBookmarks = clusters.stream().mapToInt(ClusterSummary::size).sum() + noiseCount;
+        return new InterestMapOverview(totalBookmarks, clusters.size(), noiseCount, clusters);
     }
 
     // 선택한 cluster를 "훑어보며 필요한 것만 처리"할 수 있어야 한다는 요구(8번)에 따라, 여기서는
