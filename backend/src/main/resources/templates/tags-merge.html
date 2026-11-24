@@ -10,21 +10,44 @@
 
     <a href="/tags" class="back-link">← 태그 목록</a>
     <h1>태그 정리</h1>
-    <div class="tagline">비슷한 의미의 태그들을 Claude가 그룹으로 묶어서 병합안을 제안합니다. 그룹별로 확인하고 적용하세요.</div>
+    <div class="tagline">어느 쪽이든 <strong>승인하기 전에는 데이터가 바뀌지 않습니다.</strong></div>
 
-    <button id="suggest-btn" type="button" class="tag-save-btn" style="padding:10px 18px; font-size:13px;">
-        병합안 제안받기
-    </button>
-    <div id="status" style="margin-top:12px; font-size:13px; color:var(--muted);"></div>
+    <!-- 1) 결정적 표기 변형 -->
+    <section class="merge-section">
+        <h2 class="merge-section-title">표기 변형</h2>
+        <p class="merge-section-desc">
+            공백·기호·대소문자만 다른, <strong>같은 태그가 확실한</strong> 경우입니다.
+            AI를 쓰지 않고 문자열만 비교해서 찾으므로 결과가 항상 같고 비용이 들지 않습니다.
+            <br />
+            <span class="merge-section-note">
+                "맛집추천 ↔ 맛집 추천"은 후보에 오르지만, "맛집 ↔ 맛집 추천"처럼 의미만 비슷한 건 여기 오지 않습니다.
+            </span>
+        </p>
+        <button id="variant-btn" type="button" class="tag-save-btn" style="padding:10px 18px; font-size:13px;">
+            표기 변형 찾기
+        </button>
+        <div id="variant-status" class="merge-status"></div>
+        <div id="variant-groups" class="merge-groups"></div>
+    </section>
 
-    <div id="groups" style="margin-top:24px; display:flex; flex-direction:column; gap:14px;"></div>
+    <!-- 2) AI 동의어 제안 -->
+    <section class="merge-section">
+        <h2 class="merge-section-title">AI 동의어 제안</h2>
+        <p class="merge-section-desc">
+            표기는 다르지만 <strong>뜻이 같아 보이는</strong> 태그를 Claude가 묶어서 제안합니다.
+            판단이 들어가므로 그룹마다 직접 확인하고 적용하세요.
+            <span class="merge-section-note">(AI를 호출하므로 비용이 발생합니다.)</span>
+        </p>
+        <button id="suggest-btn" type="button" class="tag-save-btn" style="padding:10px 18px; font-size:13px;">
+            AI 제안 받기
+        </button>
+        <div id="ai-status" class="merge-status"></div>
+        <div id="ai-groups" class="merge-groups"></div>
+    </section>
 
     <script>
-        const suggestBtn = document.getElementById("suggest-btn");
-        const statusEl = document.getElementById("status");
-        const groupsEl = document.getElementById("groups");
-
-        function renderGroup(group, index) {
+        // 두 섹션이 같은 그룹 구조(TagMergeGroup)와 같은 병합 API를 쓰므로 렌더러를 공유한다.
+        function renderGroup(group) {
             const card = document.createElement("div");
             card.className = "chart-card";
             card.style.padding = "18px 20px";
@@ -114,28 +137,61 @@
             return card;
         }
 
-        suggestBtn.addEventListener("click", async () => {
-            suggestBtn.disabled = true;
-            statusEl.textContent = "Claude가 태그를 분석하고 있습니다... (태그가 많으면 시간이 좀 걸릴 수 있어요)";
-            groupsEl.innerHTML = "";
-            try {
+        function wireSection(btn, statusEl, groupsEl, fetchGroups, messages) {
+            btn.addEventListener("click", async () => {
+                btn.disabled = true;
+                statusEl.textContent = messages.loading;
+                groupsEl.innerHTML = "";
+                try {
+                    const groups = await fetchGroups();
+                    if (groups.length === 0) {
+                        statusEl.textContent = messages.empty;
+                    } else {
+                        statusEl.textContent = messages.found(groups.length);
+                        groups.forEach((g) => groupsEl.appendChild(renderGroup(g)));
+                    }
+                } catch (err) {
+                    console.error(err);
+                    statusEl.textContent = messages.error;
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        }
+
+        wireSection(
+            document.getElementById("variant-btn"),
+            document.getElementById("variant-status"),
+            document.getElementById("variant-groups"),
+            async () => {
+                const res = await fetch("/api/tags/normalization-candidates");
+                if (!res.ok) throw new Error("조회 실패: " + res.status);
+                return res.json();
+            },
+            {
+                loading: "태그 표기를 비교하는 중...",
+                empty: "표기만 다른 태그를 찾지 못했습니다.",
+                found: (n) => `${n}개의 표기 변형 그룹을 찾았습니다. 확인 후 병합하세요.`,
+                error: "표기 변형을 찾는 데 실패했습니다.",
+            }
+        );
+
+        wireSection(
+            document.getElementById("suggest-btn"),
+            document.getElementById("ai-status"),
+            document.getElementById("ai-groups"),
+            async () => {
                 const res = await fetch("/api/tags/merge-suggestions", { method: "POST" });
                 if (!res.ok) throw new Error("제안 요청 실패: " + res.status);
-                const groups = await res.json();
-                if (groups.length === 0) {
-                    statusEl.textContent = "병합할 만한 비슷한 태그를 찾지 못했습니다.";
-                } else {
-                    statusEl.textContent = `${groups.length}개의 병합 그룹을 제안받았습니다.`;
-                    groups.forEach((group, i) => groupsEl.appendChild(renderGroup(group, i)));
-                }
-            } catch (err) {
-                console.error(err);
-                statusEl.textContent = "제안을 받아오는 데 실패했습니다.";
-            } finally {
-                suggestBtn.disabled = false;
+                return res.json();
+            },
+            {
+                loading: "Claude가 태그를 분석하고 있습니다... (태그가 많으면 시간이 좀 걸릴 수 있어요)",
+                empty: "병합할 만한 비슷한 태그를 찾지 못했습니다.",
+                found: (n) => `${n}개의 병합 그룹을 제안받았습니다.`,
+                error: "제안을 받아오는 데 실패했습니다.",
             }
-        });
+        );
     </script>
-
 </body>
 </html>

@@ -1,6 +1,14 @@
 .env
+.env.*
+!.env.example
 build/
 .gradle/
 *.iml
 .idea/
 out/
+
+# Experiment outputs derived from personal bookmark data
+*.jsonl
+.embedding-cache/
+embedding-cache-data/
+embedding-cache-demo-data/

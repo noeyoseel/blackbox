@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>blackbox · Interest Map</title>
+    <th:block th:replace="~{fragments/common :: head-assets}"></th:block>
+</head>
+<body>
+    <div th:replace="~{fragments/common :: header}"></div>
+
+    <h1>Interest Map</h1>
+    <p class="interest-map-stat-line" th:if="${available}">
+        <span th:text="${overview.totalBookmarks}">0</span> bookmarks ·
+        <span th:text="${overview.clusterCount}">0</span> clusters
+    </p>
+    <div class="tagline">저장한 북마크를 의미적으로 연결해 관심사별로 탐색합니다.</div>
+
+    <div th:if="${not available}" class="empty">아직 생성된 clustering 결과가 없습니다.</div>
+
+    <th:block th:if="${available}">
+        <!-- 1. Interest Map 전체 지형 — 페이지의 메인 콘텐츠 -->
+        <div th:if="${not umapAvailable}" class="empty">UMAP 결과가 아직 준비되지 않았습니다.</div>
+        <div th:if="${umapAvailable}" class="interest-map-canvas-wrap interest-map-hero">
+            <canvas id="interest-map-canvas" width="1000" height="560"></canvas>
+            <div id="interest-map-tooltip" class="interest-map-tooltip" style="display:none;"></div>
+            <div class="interest-map-canvas-footer">
+                <span class="interest-map-hint-static">점 하나 = 북마크 하나 · hover로 미리보기 · 클릭하면 원문으로 이동</span>
+                <button type="button" id="interest-map-clear-selection" class="home-control-btn" style="display:none;">전체 보기</button>
+            </div>
+            <div class="interest-map-legend">
+                <span class="interest-map-legend-item" th:each="c, iter : ${overview.clusters}" th:if="${iter.index < 5}">
+                    <span class="interest-map-legend-dot"
+                          th:style="'background:var(--cluster-color-' + ${iter.index + 1} + ')'"></span>
+                    <span th:text="(${c.name() != null} ? ${c.name()} : ('Cluster #' + ${c.number()})) + ' · ' + ${c.size()}">AI · 0</span>
+                </span>
+                <span class="interest-map-legend-item interest-map-legend-muted">
+                    <span class="interest-map-legend-dot interest-map-legend-dot-muted"></span>
+                    <span>Other clusters</span>
+                </span>
+                <span class="interest-map-legend-item interest-map-legend-muted">
+                    <span class="interest-map-legend-dot interest-map-legend-dot-hollow"></span>
+                    <span>Noise</span>
+                </span>
+            </div>
+        </div>
+        <script th:if="${umapAvailable}" th:inline="javascript">
+            /*<![CDATA[*/
+            window.INTEREST_MAP_TOP_CLUSTERS = /*[[${topClusterNumbers}]]*/ [];
+            window.INTEREST_MAP_CLUSTER_NAMES = /*[[${clusterNames}]]*/ {};
+            /*]]>*/
+        </script>
+
+        <!-- 2. 주요 관심사 -->
+        <h2>주요 관심사</h2>
+        <div class="interest-map-featured" id="interest-map-featured">
+            <button type="button" class="interest-map-featured-card"
+                    th:each="c, iter : ${overview.clusters}" th:if="${iter.index < 5}"
+                    th:attr="data-cluster=${c.number()}, data-cluster-name=${c.name()}, data-cluster-size=${c.size()}">
+                <span class="interest-map-featured-title"
+                      th:text="${c.name() != null} ? ${c.name()} : ('Cluster #' + ${c.number()})">AI</span>
+                <span class="interest-map-featured-size"
+                      th:text="'#' + ${c.number()} + ' · ' + ${c.size()} + ' bookmarks'">#1 · 0 bookmarks</span>
+                <span class="interest-map-featured-preview"
+                      th:if="${not #lists.isEmpty(c.representatives())}"
+                      th:text="${c.representatives()[0].text()}">미리보기</span>
+            </button>
+        </div>
+
+        <!-- 3. 선택한 관심사의 북마크 -->
+        <h2 id="interest-map-selected-heading">선택한 관심사</h2>
+        <div class="interest-map-selected-section" id="interest-map-selected-section">
+            <div class="empty">지도에서 점을 살펴보거나, 위 카드나 아래 전체 목록에서 관심사를 선택하면
+                관련 북마크가 여기 나타납니다.</div>
+        </div>
+
+        <!-- 4. 전체 cluster 탐색 (2차 정보) -->
+        <details class="interest-map-all-clusters">
+            <summary>모든 관심사 보기 <span th:text="'(' + ${overview.clusterCount} + '개)'">(152개)</span></summary>
+            <div class="interest-map-cluster-list" id="interest-map-cluster-list">
+                <button type="button" class="interest-map-cluster-item"
+                        th:each="c : ${overview.clusters}"
+                        th:attr="data-cluster=${c.number()}, data-cluster-name=${c.name()}, data-cluster-size=${c.size()}">
+                    <div class="interest-map-cluster-item-head">
+                        <span th:text="${c.name() != null} ? ${c.name()} : ('Cluster #' + ${c.number()})">AI</span>
+                        <span class="interest-map-cluster-item-size"
+                              th:text="'#' + ${c.number()} + ' · ' + ${c.size()} + '건'">#1 · 0건</span>
+                    </div>
+                    <div class="interest-map-cluster-item-reps">
+                        <span class="interest-map-rep-preview" th:each="r : ${c.representatives()}"
+                              th:text="${r.text()}">대표 미리보기</span>
+                    </div>
+                </button>
+            </div>
+        </details>
+
+        <button type="button" id="interest-map-noise-toggle" class="home-control-btn interest-map-noise-link"
+                th:text="'미분류 · ' + ${overview.noiseCount}">미분류 · 55</button>
+        <div id="interest-map-noise-list" class="interest-map-selected-section" style="display:none; margin-top:12px;"></div>
+    </th:block>
+
+    <script src="/js/bookmark-card-render.js"></script>
+    <script src="/js/tag-editor.js"></script>
+    <script src="/js/archive-toggle.js"></script>
+    <script src="/js/interest-map.js"></script>
+</body>
+</html>

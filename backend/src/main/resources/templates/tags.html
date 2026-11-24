@@ -10,20 +10,55 @@
 
     <h1>태그별로 보기</h1>
     <div class="tagline">
-        <a href="/" style="color:var(--muted); text-decoration:none;">← 피드로</a>
+        <a href="/feed" style="color:var(--muted); text-decoration:none;">← 피드로</a>
         &nbsp;·&nbsp;
         <a href="/tags/merge" style="color:var(--accent); text-decoration:none;">태그 정리하기 →</a>
     </div>
 
+    <div class="tag-toolbar">
+        <span th:if="${not showingAll}"
+              th:text="${minCount} + '회 이상 사용된 태그 ' + ${#lists.size(tags)} + '개'">태그</span>
+        <span th:if="${showingAll}"
+              th:text="'전체 태그 ' + ${#lists.size(tags)} + '개'">태그</span>
+        <a th:if="${not showingAll}" class="tag-toolbar-link"
+           th:href="@{/tags(min=1)}" th:text="'전체 ' + ${totalDistinctTags} + '개 보기'">전체 보기</a>
+        <a th:if="${showingAll}" class="tag-toolbar-link" th:href="@{/tags}">자주 쓰는 태그만 보기</a>
+        <input type="text" id="tag-filter" class="tag-filter-input" placeholder="태그 검색" />
+    </div>
+
     <div th:if="${#lists.isEmpty(tags)}" class="empty">아직 태깅된 북마크가 없습니다.</div>
-    <div class="tag-grid" th:unless="${#lists.isEmpty(tags)}">
+    <div class="tag-grid" id="tag-grid" th:unless="${#lists.isEmpty(tags)}">
         <a th:each="t : ${tags}"
            th:href="@{/tags/{tag}(tag=${t.tag()})}"
+           th:attr="data-tag=${t.tag()}"
            class="tag-chip">
             <span th:text="${t.tag()}">태그</span>
             <span class="count" th:text="${t.count()}">0</span>
         </a>
     </div>
+    <div id="tag-filter-empty" class="empty" style="display:none;">일치하는 태그가 없습니다.</div>
 
+    <script>
+        // 서버 왕복 없이 이미 렌더된 chip만 걸러낸다. "전체 보기"에서도 목록이 한 번에
+        // 들어와 있으므로 그대로 동작한다.
+        (() => {
+            const input = document.getElementById("tag-filter");
+            const grid = document.getElementById("tag-grid");
+            const emptyEl = document.getElementById("tag-filter-empty");
+            if (!input || !grid) return;
+            const chips = Array.from(grid.querySelectorAll(".tag-chip"));
+
+            input.addEventListener("input", () => {
+                const q = input.value.trim().toLowerCase();
+                let visible = 0;
+                chips.forEach((chip) => {
+                    const match = !q || (chip.dataset.tag || "").toLowerCase().includes(q);
+                    chip.style.display = match ? "" : "none";
+                    if (match) visible += 1;
+                });
+                emptyEl.style.display = visible === 0 ? "flex" : "none";
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -9,7 +9,11 @@
     <div th:replace="~{fragments/common :: header}"></div>
 
     <h1 th:text="'&quot;' + ${q} + '&quot;'">검색어</h1>
-    <div class="tagline" th:text="${#lists.size(results)} + '건 찾음'">0건</div>
+    <div class="tagline">
+        <span th:text="${totalCount} + '건 찾음'">0건</span>
+        <span th:if="${totalPages > 1}" th:text="' · ' + (${page} + 1) + ' / ' + ${totalPages} + ' 페이지'"></span>
+        <span class="search-scope">본문과 태그를 함께 찾습니다.</span>
+    </div>
 
     <div th:if="${#strings.isEmpty(q)}" class="empty">헤더의 검색창에 키워드를 입력해보세요.</div>
     <div th:if="${not #strings.isEmpty(q) and #lists.isEmpty(results)}" class="empty">일치하는 북마크가 없습니다.</div>
@@ -20,8 +24,15 @@
         </th:block>
     </div>
 
+    <div class="pager" th:if="${totalPages > 1}">
+        <a class="pager-link" th:if="${page > 0}"
+           th:href="@{/search(q=${q}, page=${page - 1})}">← 이전</a>
+        <span class="pager-status" th:text="(${page} + 1) + ' / ' + ${totalPages}">1 / 1</span>
+        <a class="pager-link" th:if="${page + 1 < totalPages}"
+           th:href="@{/search(q=${q}, page=${page + 1})}">다음 →</a>
+    </div>
+
     <script src="/js/tag-editor.js"></script>
     <script src="/js/archive-toggle.js"></script>
-    <script src="/js/folder-picker.js"></script>
 </body>
 </html>

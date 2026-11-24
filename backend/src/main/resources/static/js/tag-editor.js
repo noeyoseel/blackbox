@@ -39,15 +39,13 @@ function bindTagEditors(root) {
         if (!res.ok) throw new Error("저장 실패: " + res.status);
         const data = await res.json();
 
-        // .tag-list에는 태그 필 외에 폴더 배지도 같이 들어있어서, 태그 필만 갈아끼운다.
         tagList.querySelectorAll(".tag-pill").forEach((el) => el.remove());
-        const folderBadge = tagList.querySelector(".folder-badge");
         data.tags.forEach((tag) => {
           const link = document.createElement("a");
           link.className = "tag-pill";
           link.textContent = tag;
           link.href = `/tags/${encodeURIComponent(tag)}`;
-          tagList.insertBefore(link, folderBadge);
+          tagList.appendChild(link);
         });
         editRow.style.display = "none";
       } catch (err) {

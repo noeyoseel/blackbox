@@ -3,3 +3,11 @@
 Thumbs.db
 CLAUDE.md
 CLAUDE.ko.md
+
+# Local tool settings
+.claude/settings.local.json
+
+# Database dumps and logs
+*.sql
+*.dump
+*.log
