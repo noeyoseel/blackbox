@@ -1,5 +1,7 @@
 package com.bookmarkdrawer.bookmark;
 
+import com.bookmarkdrawer.duplicates.DuplicateGroup;
+import com.bookmarkdrawer.duplicates.DuplicateGroupRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -21,6 +23,7 @@ import java.util.stream.Collectors;
 public class BookmarkService {
 
     private final BookmarkRepository bookmarkRepository;
+    private final DuplicateGroupRepository duplicateGroupRepository;
 
     @Transactional
     public BookmarkIngestResponse ingest(List<TweetPayload> tweets) {
@@ -131,12 +134,25 @@ public class BookmarkService {
         return bookmarkRepository.findByArchivedTrueOrderByCollectedAtDesc();
     }
 
+    // 행 잠금 조회(findByTweetIdForUpdate) 덕분에 같은 북마크의 동시 삭제는 뒤 요청이 404,
+    // 삭제 도중 끼어든 보관 해제는 앞뒤 순서대로 처리되어 보관 상태 검증이 우회되지 않는다.
+    // 태그·미디어는 @ElementCollection이라 북마크와 함께 지워지고, 중복 그룹 멤버 관계는 같은
+    // 트랜잭션에서 직접 정리한다. 중간에 예외가 나면 전부 롤백된다.
     @Transactional
     public void deletePermanently(String tweetId) {
-        Bookmark bookmark = bookmarkRepository.findByTweetId(tweetId)
+        Bookmark bookmark = bookmarkRepository.findByTweetIdForUpdate(tweetId)
                 .orElseThrow(() -> new EntityNotFoundException("트윗을 찾을 수 없음: " + tweetId));
         if (!bookmark.isArchived()) {
             throw new IllegalStateException("보관함에 있는 북마크만 영구 삭제할 수 있습니다.");
+        }
+        // pending·dismissed 그룹 모두에서 이 북마크를 뺀다. 멤버가 1명 이하로 남은 그룹은 더 이상
+        // 중복 그룹이 아니므로 지운다(화면도 2명 미만 그룹은 원래 숨긴다). 이 북마크와 무관한 그룹은
+        // 조회되지 않으므로 건드리지 않는다.
+        for (DuplicateGroup group : duplicateGroupRepository.findByMemberTweetIdForUpdate(tweetId)) {
+            group.removeMember(tweetId);
+            if (group.getMemberTweetIds().size() < 2) {
+                duplicateGroupRepository.delete(group);
+            }
         }
         bookmarkRepository.delete(bookmark);
     }

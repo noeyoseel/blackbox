@@ -1,8 +1,10 @@
 package com.bookmarkdrawer.bookmark;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,6 +27,18 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
     List<Bookmark> findByTaggedTrue();
 
     List<Bookmark> findByTweetIdIn(Set<String> tweetIds);
+
+    // 영구 삭제 전용. 보관 상태 확인과 삭제 사이에 다른 요청(보관 해제, 같은 북마크 동시 삭제)이
+    // 끼어들지 못하게 행을 SELECT ... FOR UPDATE로 잠근다. 잠금을 기다린 요청은 앞 요청이 커밋한
+    // 최신 상태를 읽으므로, 이미 지워졌으면 빈 결과(404), 보관이 해제됐으면 archived=false(409)가 된다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Bookmark b WHERE b.tweetId = :tweetId")
+    Optional<Bookmark> findByTweetIdForUpdate(@Param("tweetId") String tweetId);
+
+    // 주어진 tweetId 중 DB에 실제로 남아 있는 것만. Interest Map 수치를 결과 파일 당시 값이 아니라
+    // 현재 데이터 기준으로 세는 데 쓴다(엔티티를 다 읽지 않도록 tweetId만 조회).
+    @Query("SELECT b.tweetId FROM Bookmark b WHERE b.tweetId IN :tweetIds")
+    List<String> findExistingTweetIds(@Param("tweetIds") Set<String> tweetIds);
 
     // 정렬은 피드(findFeedPage)와 같은 기준을 쓴다. tweetCreatedAt은 트위터 원본 문자열
     // ("Wed Oct 10 20:19:24 +0000 2018")이라 사전순 정렬이 곧 요일 이름 정렬이 되어 무의미했고,
